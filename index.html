@@ -1,28 +1,49 @@
 <!doctype html>
 <html lang="fr">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dbcss</title>
 <style>
   :root { color-scheme: light dark; font-family: ui-monospace, monospace; --h: 2rem; }
-  body { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
-  fieldset { border: 1px solid #8884; margin: .5rem 0; }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
+  fieldset { border: 1px solid #8884; margin: .25rem 0; }
   label { margin-right: .75rem; cursor: pointer; }
+  select { font: inherit; }
+  h3 { margin: 1rem 0 0; font-size: 1rem; opacity: .6; }
 
-  /* ---------- table ---------- */
-  .row { display: grid; grid-template-columns: 1fr 4rem 6rem 4rem; height: var(--h); align-items: center; border-bottom: 1px solid #8882; }
+  .db { display: flex; flex-direction: column; }
+  .db > .ct { order: 1; } /* la table cities s'affiche en bas, mais reste avant users dans le DOM (portée des compteurs) */
+
+  /* ---------- tables ---------- */
+  .row { display: grid; grid-template-columns: 1.5rem 1fr 3rem 5rem 4.5rem; grid-auto-columns: 6rem; height: var(--h); align-items: center; column-gap: .5rem; border-bottom: 1px solid #8882; }
   .head { font-weight: bold; }
   .rows { display: flex; flex-direction: column; }
+  .city, .chead { grid-template-columns: 1fr 6rem; }
 
-  /* age stockée une seule fois, en custom property, affichée via un compteur */
-  .row[style] { counter-reset: age var(--age); }
+  .rows .row {
+    --alive: 1;
+    --gt: clamp(0, var(--age) - var(--min), 1);   /* 1 si age > min, sinon 0 */
+    --keep: calc(var(--gt) * var(--alive));
+    --k: attr(data-city type(<custom-ident>));    /* clé de jointure */
+    counter-reset: age var(--age);
+    counter-increment: n var(--keep) sum calc(var(--keep) * var(--age));
+    height: calc(var(--gt) * var(--h));
+    border-bottom-width: calc(var(--gt) * 1px);
+    overflow: hidden;
+    flex-shrink: 0; /* sinon LIMIT écrase les lignes au lieu de les couper */
+  }
   .age::after { content: counter(age); }
 
   /* ---------- WHERE ---------- */
   .db:has(#c-lyon:checked)   .rows .row:not([data-city="Lyon"])   { display: none; }
   .db:has(#c-paris:checked)  .rows .row:not([data-city="Paris"])  { display: none; }
   .db:has(#c-nantes:checked) .rows .row:not([data-city="Nantes"]) { display: none; }
-  .db:has(#r-dev:checked)    .rows .row:not([data-role="dev"])    { display: none; }
-  .db:has(#r-ops:checked)    .rows .row:not([data-role="ops"])    { display: none; }
+  .db:has(#r-dev:checked)    .rows .row:not(:has(option[value="dev"]:checked)) { display: none; }
+  .db:has(#r-ops:checked)    .rows .row:not(:has(option[value="ops"]:checked)) { display: none; }
+  .db { --min: 0; }
+  .db:has(#a-30:checked) { --min: 30; }
+  .db:has(#a-40:checked) { --min: 40; }
 
   /* ---------- ORDER BY ---------- */
   .db:has(#o-asc:checked)  .rows .row { order: var(--age); }
@@ -32,30 +53,64 @@
   .db:has(#l-2:checked) .rows { max-height: calc(2 * var(--h)); overflow: hidden; }
   .db:has(#l-3:checked) .rows { max-height: calc(3 * var(--h)); overflow: hidden; }
 
-  /* ---------- COUNT(*) : les lignes en display:none n'incrémentent pas ---------- */
-  .db { counter-reset: n; }
-  .rows .row { counter-increment: n; }
-  .count::after { content: "COUNT(*) = " counter(n); }
+  /* ---------- JOIN cities : chaque ville crée un compteur nommé d'après sa clé ---------- */
+  .city { counter-reset: attr(data-name type(<custom-ident>)) attr(data-pop type(<integer>)); }
+  .city::before { content: attr(data-name); }
+  .city::after  { content: attr(data-pop); }
+  .rows .pop::after { content: counter(var(--k)); }
+  .pop { display: none; grid-column: 6; }
+  .db:has(#j:checked) .pop { display: block; }
+
+  /* ---------- UPDATE (select) / DELETE (soft delete) ---------- */
+  .rows .row:has(.del:checked) { --alive: 0; opacity: .4; text-decoration: line-through; }
+
+  /* ---------- COUNT / SUM / AVG ----------
+     COUNT et SUM : compteurs. AVG : on écrit SUM et COUNT en "bâtons" (x),
+     on mesure leur largeur avec des container queries, et on divise. */
+  .db { counter-reset: n sum; }
+  @counter-style tally { system: additive; additive-symbols: 100 "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 10 "xxxxxxxxxx", 1 "x", 0 ""; }
+  @property --s   { syntax: "<length>";  inherits: true; initial-value: 0px; }
+  @property --avg { syntax: "<number>";  inherits: true; initial-value: 0; }
+  @property --a10 { syntax: "<integer>"; inherits: true; initial-value: 0; }
+  .agg { overflow: hidden; }
+  .m { display: grid; width: max-content; }
+  .m > * { grid-area: 1 / 1; }
+  .m > i { height: 0; visibility: hidden; white-space: nowrap; }
+  .m > .c { container-type: inline-size; }
+  .sum::before { content: counter(sum, tally); }
+  .cnt::before { content: counter(n, tally); }
+  .c > .m { --s: 100cqw; }                           /* largeur = SUM */
+  .stats {
+    --avg: tan(atan2(var(--s), 100cqw));             /* SUM / COUNT */
+    --a10: calc(var(--avg) * 10);
+    counter-reset: ai round(down, var(--a10) / 10, 1) ad mod(var(--a10), 10);
+    white-space: pre; margin: .5rem 0;
+  }
+  .stats::after { content: "COUNT(*) = " counter(n) "   SUM(age) = " counter(sum) "   AVG(age) = " counter(ai) "." counter(ad); }
 
   /* ---------- la requête SQL, générée en CSS ---------- */
-  .db { --w1: ""; --w2: ""; --o: ""; --l: ""; }
+  .db { --sel: "SELECT * FROM users"; --w1: ""; --w2: ""; --wa: ""; --o: ""; --l: ""; --kr: "  AND"; --ka: "  AND"; }
+  .db:has(#j:checked)        { --sel: "SELECT u.*, c.pop\A   FROM users u\A   JOIN cities c ON c.name = u.city"; }
+  .db:has(#c-all:checked)    { --kr: "WHERE"; }
+  .db:has(#c-all:checked):has(#r-all:checked) { --ka: "WHERE"; }
   .db:has(#c-lyon:checked)   { --w1: "\A WHERE city = 'Lyon'"; }
   .db:has(#c-paris:checked)  { --w1: "\A WHERE city = 'Paris'"; }
   .db:has(#c-nantes:checked) { --w1: "\A WHERE city = 'Nantes'"; }
-  .db:has(#r-dev:checked)    { --w2: "\A   AND role = 'dev'"; }
-  .db:has(#r-ops:checked)    { --w2: "\A   AND role = 'ops'"; }
-  /* pas de WHERE ville mais un rôle : on corrige le AND */
-  .db:has(#c-all:checked):has(#r-dev:checked) { --w2: "\A WHERE role = 'dev'"; }
-  .db:has(#c-all:checked):has(#r-ops:checked) { --w2: "\A WHERE role = 'ops'"; }
+  .db:has(#r-dev:checked)    { --w2: "\A " var(--kr) " role = 'dev'"; }
+  .db:has(#r-ops:checked)    { --w2: "\A " var(--kr) " role = 'ops'"; }
+  .db:not(:has(#a-0:checked)) { --wa: "\A " var(--ka) " age > " counter(min); }
   .db:has(#o-asc:checked)    { --o: "\A ORDER BY age ASC"; }
   .db:has(#o-desc:checked)   { --o: "\A ORDER BY age DESC"; }
   .db:has(#l-2:checked)      { --l: "\A LIMIT 2"; }
   .db:has(#l-3:checked)      { --l: "\A LIMIT 3"; }
-  .sql::before { content: "SELECT * FROM users" var(--w1) var(--w2) var(--o) var(--l) ";"; white-space: pre; }
-  .sql { padding: .75rem; background: #8881; border-radius: 4px; }
+  .sql { counter-reset: min var(--min); padding: .75rem; background: #8881; border-radius: 4px; }
+  .sql::before { content: var(--sel) var(--w1) var(--w2) var(--wa) var(--o) var(--l) ";"; white-space: pre; }
 </style>
 
 <div class="db">
+  <fieldset><legend>JOIN</legend>
+    <label><input type="checkbox" id="j"> cities ON city</label>
+  </fieldset>
   <fieldset><legend>WHERE city</legend>
     <label><input type="radio" name="c" id="c-all" checked> *</label>
     <label><input type="radio" name="c" id="c-lyon"> Lyon</label>
@@ -66,6 +121,11 @@
     <label><input type="radio" name="r" id="r-all" checked> *</label>
     <label><input type="radio" name="r" id="r-dev"> dev</label>
     <label><input type="radio" name="r" id="r-ops"> ops</label>
+  </fieldset>
+  <fieldset><legend>AND age &gt;</legend>
+    <label><input type="radio" name="a" id="a-0" checked> *</label>
+    <label><input type="radio" name="a" id="a-30"> 30</label>
+    <label><input type="radio" name="a" id="a-40"> 40</label>
   </fieldset>
   <fieldset><legend>ORDER BY age</legend>
     <label><input type="radio" name="o" id="o-none" checked> —</label>
@@ -80,16 +140,24 @@
 
   <pre class="sql"></pre>
 
-  <div class="row head"><span>name</span><span>age</span><span>city</span><span>role</span></div>
+  <h3 class="ct">cities</h3>
+  <div class="row chead head ct"><span>name</span><span>pop</span></div>
+  <div class="row city ct" data-name="Lyon"   data-pop="522250"></div>
+  <div class="row city ct" data-name="Paris"  data-pop="2102650"></div>
+  <div class="row city ct" data-name="Nantes" data-pop="323204"></div>
+
+  <h3>users</h3>
+  <div class="row head"><span>✕</span><span>name</span><span>age</span><span>city</span><span>role</span><span class="pop">c.pop</span></div>
   <div class="rows">
-    <div class="row" data-city="Lyon"   data-role="dev" style="--age:34"><span>Alice</span><span class="age"></span><span>Lyon</span><span>dev</span></div>
-    <div class="row" data-city="Paris"  data-role="ops" style="--age:27"><span>Bob</span><span class="age"></span><span>Paris</span><span>ops</span></div>
-    <div class="row" data-city="Nantes" data-role="dev" style="--age:45"><span>Chloé</span><span class="age"></span><span>Nantes</span><span>dev</span></div>
-    <div class="row" data-city="Lyon"   data-role="ops" style="--age:52"><span>David</span><span class="age"></span><span>Lyon</span><span>ops</span></div>
-    <div class="row" data-city="Paris"  data-role="dev" style="--age:23"><span>Emma</span><span class="age"></span><span>Paris</span><span>dev</span></div>
-    <div class="row" data-city="Lyon"   data-role="dev" style="--age:39"><span>Farid</span><span class="age"></span><span>Lyon</span><span>dev</span></div>
-    <div class="row" data-city="Nantes" data-role="ops" style="--age:31"><span>Gaëlle</span><span class="age"></span><span>Nantes</span><span>ops</span></div>
+    <div class="row" data-city="Lyon"   style="--age:34"><input type="checkbox" class="del" aria-label="DELETE"><span>Alice</span><span class="age"></span><span>Lyon</span><select aria-label="role"><option value="dev" selected>dev</option><option value="ops">ops</option></select><span class="pop"></span></div>
+    <div class="row" data-city="Paris"  style="--age:27"><input type="checkbox" class="del" aria-label="DELETE"><span>Bob</span><span class="age"></span><span>Paris</span><select aria-label="role"><option value="dev">dev</option><option value="ops" selected>ops</option></select><span class="pop"></span></div>
+    <div class="row" data-city="Nantes" style="--age:45"><input type="checkbox" class="del" aria-label="DELETE"><span>Chloé</span><span class="age"></span><span>Nantes</span><select aria-label="role"><option value="dev" selected>dev</option><option value="ops">ops</option></select><span class="pop"></span></div>
+    <div class="row" data-city="Lyon"   style="--age:52"><input type="checkbox" class="del" aria-label="DELETE"><span>David</span><span class="age"></span><span>Lyon</span><select aria-label="role"><option value="dev">dev</option><option value="ops" selected>ops</option></select><span class="pop"></span></div>
+    <div class="row" data-city="Paris"  style="--age:23"><input type="checkbox" class="del" aria-label="DELETE"><span>Emma</span><span class="age"></span><span>Paris</span><select aria-label="role"><option value="dev" selected>dev</option><option value="ops">ops</option></select><span class="pop"></span></div>
+    <div class="row" data-city="Lyon"   style="--age:39"><input type="checkbox" class="del" aria-label="DELETE"><span>Farid</span><span class="age"></span><span>Lyon</span><select aria-label="role"><option value="dev" selected>dev</option><option value="ops">ops</option></select><span class="pop"></span></div>
+    <div class="row" data-city="Nantes" style="--age:31"><input type="checkbox" class="del" aria-label="DELETE"><span>Gaëlle</span><span class="age"></span><span>Nantes</span><select aria-label="role"><option value="dev">dev</option><option value="ops" selected>ops</option></select><span class="pop"></span></div>
   </div>
-  <p class="count"></p>
+
+  <div class="agg"><div class="m"><i class="sum"></i><div class="c"><div class="m"><i class="cnt"></i><div class="c"><p class="stats"></p></div></div></div></div></div>
 </div>
 </html>
