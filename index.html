@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>dbcss</title>
+<style>
+  :root { color-scheme: light dark; font-family: ui-monospace, monospace; --h: 2rem; }
+  body { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+  fieldset { border: 1px solid #8884; margin: .5rem 0; }
+  label { margin-right: .75rem; cursor: pointer; }
+
+  /* ---------- table ---------- */
+  .row { display: grid; grid-template-columns: 1fr 4rem 6rem 4rem; height: var(--h); align-items: center; border-bottom: 1px solid #8882; }
+  .head { font-weight: bold; }
+  .rows { display: flex; flex-direction: column; }
+
+  /* age stockée une seule fois, en custom property, affichée via un compteur */
+  .row[style] { counter-reset: age var(--age); }
+  .age::after { content: counter(age); }
+
+  /* ---------- WHERE ---------- */
+  .db:has(#c-lyon:checked)   .rows .row:not([data-city="Lyon"])   { display: none; }
+  .db:has(#c-paris:checked)  .rows .row:not([data-city="Paris"])  { display: none; }
+  .db:has(#c-nantes:checked) .rows .row:not([data-city="Nantes"]) { display: none; }
+  .db:has(#r-dev:checked)    .rows .row:not([data-role="dev"])    { display: none; }
+  .db:has(#r-ops:checked)    .rows .row:not([data-role="ops"])    { display: none; }
+
+  /* ---------- ORDER BY ---------- */
+  .db:has(#o-asc:checked)  .rows .row { order: var(--age); }
+  .db:has(#o-desc:checked) .rows .row { order: calc(-1 * var(--age)); }
+
+  /* ---------- LIMIT : hauteur fixe + overflow, donc appliqué APRÈS le tri ---------- */
+  .db:has(#l-2:checked) .rows { max-height: calc(2 * var(--h)); overflow: hidden; }
+  .db:has(#l-3:checked) .rows { max-height: calc(3 * var(--h)); overflow: hidden; }
+
+  /* ---------- COUNT(*) : les lignes en display:none n'incrémentent pas ---------- */
+  .db { counter-reset: n; }
+  .rows .row { counter-increment: n; }
+  .count::after { content: "COUNT(*) = " counter(n); }
+
+  /* ---------- la requête SQL, générée en CSS ---------- */
+  .db { --w1: ""; --w2: ""; --o: ""; --l: ""; }
+  .db:has(#c-lyon:checked)   { --w1: "\A WHERE city = 'Lyon'"; }
+  .db:has(#c-paris:checked)  { --w1: "\A WHERE city = 'Paris'"; }
+  .db:has(#c-nantes:checked) { --w1: "\A WHERE city = 'Nantes'"; }
+  .db:has(#r-dev:checked)    { --w2: "\A   AND role = 'dev'"; }
+  .db:has(#r-ops:checked)    { --w2: "\A   AND role = 'ops'"; }
+  /* pas de WHERE ville mais un rôle : on corrige le AND */
+  .db:has(#c-all:checked):has(#r-dev:checked) { --w2: "\A WHERE role = 'dev'"; }
+  .db:has(#c-all:checked):has(#r-ops:checked) { --w2: "\A WHERE role = 'ops'"; }
+  .db:has(#o-asc:checked)    { --o: "\A ORDER BY age ASC"; }
+  .db:has(#o-desc:checked)   { --o: "\A ORDER BY age DESC"; }
+  .db:has(#l-2:checked)      { --l: "\A LIMIT 2"; }
+  .db:has(#l-3:checked)      { --l: "\A LIMIT 3"; }
+  .sql::before { content: "SELECT * FROM users" var(--w1) var(--w2) var(--o) var(--l) ";"; white-space: pre; }
+  .sql { padding: .75rem; background: #8881; border-radius: 4px; }
+</style>
+
+<div class="db">
+  <fieldset><legend>WHERE city</legend>
+    <label><input type="radio" name="c" id="c-all" checked> *</label>
+    <label><input type="radio" name="c" id="c-lyon"> Lyon</label>
+    <label><input type="radio" name="c" id="c-paris"> Paris</label>
+    <label><input type="radio" name="c" id="c-nantes"> Nantes</label>
+  </fieldset>
+  <fieldset><legend>AND role</legend>
+    <label><input type="radio" name="r" id="r-all" checked> *</label>
+    <label><input type="radio" name="r" id="r-dev"> dev</label>
+    <label><input type="radio" name="r" id="r-ops"> ops</label>
+  </fieldset>
+  <fieldset><legend>ORDER BY age</legend>
+    <label><input type="radio" name="o" id="o-none" checked> —</label>
+    <label><input type="radio" name="o" id="o-asc"> ASC</label>
+    <label><input type="radio" name="o" id="o-desc"> DESC</label>
+  </fieldset>
+  <fieldset><legend>LIMIT</legend>
+    <label><input type="radio" name="l" id="l-all" checked> —</label>
+    <label><input type="radio" name="l" id="l-2"> 2</label>
+    <label><input type="radio" name="l" id="l-3"> 3</label>
+  </fieldset>
+
+  <pre class="sql"></pre>
+
+  <div class="row head"><span>name</span><span>age</span><span>city</span><span>role</span></div>
+  <div class="rows">
+    <div class="row" data-city="Lyon"   data-role="dev" style="--age:34"><span>Alice</span><span class="age"></span><span>Lyon</span><span>dev</span></div>
+    <div class="row" data-city="Paris"  data-role="ops" style="--age:27"><span>Bob</span><span class="age"></span><span>Paris</span><span>ops</span></div>
+    <div class="row" data-city="Nantes" data-role="dev" style="--age:45"><span>Chloé</span><span class="age"></span><span>Nantes</span><span>dev</span></div>
+    <div class="row" data-city="Lyon"   data-role="ops" style="--age:52"><span>David</span><span class="age"></span><span>Lyon</span><span>ops</span></div>
+    <div class="row" data-city="Paris"  data-role="dev" style="--age:23"><span>Emma</span><span class="age"></span><span>Paris</span><span>dev</span></div>
+    <div class="row" data-city="Lyon"   data-role="dev" style="--age:39"><span>Farid</span><span class="age"></span><span>Lyon</span><span>dev</span></div>
+    <div class="row" data-city="Nantes" data-role="ops" style="--age:31"><span>Gaëlle</span><span class="age"></span><span>Nantes</span><span>ops</span></div>
+  </div>
+  <p class="count"></p>
+</div>
+</html>
