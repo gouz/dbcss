@@ -1,6 +1,6 @@
 # dbcss
 
-A database query engine written in pure CSS. No JavaScript.
+A database query engine written in pure CSS. No JavaScript, except for `INSERT`.
 
 **Demo:** https://gouz.github.io/dbcss/
 
@@ -29,13 +29,13 @@ Pick a query with the radio buttons. CSS filters, sorts, limits and counts the r
 | `JOIN cities ON c.name = u.city` | each city row creates a counter *named after its key*: `counter-reset: attr(data-name type(<custom-ident>)) attr(data-pop type(<integer>))`; user rows read `counter(attr(data-city …))` |
 | `UPDATE users SET role = …` | role is a `<select>`; queries read `option:checked` |
 | `DELETE` | soft delete: a checkbox sets `--alive: 0`, the row is struck through and excluded from aggregates |
+| `INSERT INTO users` | the only JS (12 lines): CSS can't create elements, so a form clones a row. Everything else picks it up. |
 | SQL preview | string custom properties concatenated in `content` |
 
 Numeric values live once in a custom property and are rendered back as text with `counter-reset: age var(--age)`.
 
 ## Not supported
 
-- `INSERT`: CSS can't create elements. Revealing pre-allocated hidden rows would be cheating.
 - Persistence: it's an in-memory database. Reload and it's gone.
 - `AVG` tops out around a sum of ~15 000 (Chrome caps counter representations at ~150 symbols).
 

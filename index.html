@@ -159,5 +159,29 @@
   </div>
 
   <div class="agg"><div class="m"><i class="sum"></i><div class="c"><div class="m"><i class="cnt"></i><div class="c"><p class="stats"></p></div></div></div></div></div>
+
+  <form id="ins"><fieldset><legend>INSERT INTO users</legend>
+    <input name="uname" placeholder="name" required size="8">
+    <input name="age" type="number" min="1" max="150" step="1" placeholder="age" required style="width: 5rem">
+    <select name="city"><option>Lyon</option><option>Paris</option><option>Nantes</option></select>
+    <select name="role"><option>dev</option><option>ops</option></select>
+    <button>INSERT</button>
+  </fieldset></form>
 </div>
+
+<script>
+  // Le seul JS du projet : le CSS ne sait pas créer d'éléments.
+  document.querySelector('#ins').onsubmit = e => {
+    e.preventDefault();
+    const f = e.target, row = document.querySelector('.rows .row').cloneNode(true);
+    row.dataset.city = f.city.value;
+    row.style.setProperty('--age', f.age.value);
+    row.querySelector('.del').checked = false;
+    row.children[1].textContent = f.uname.value;
+    row.children[3].textContent = f.city.value;
+    row.querySelector('select').value = f.role.value;
+    document.querySelector('.rows').append(row);
+    f.reset();
+  };
+</script>
 </html>
